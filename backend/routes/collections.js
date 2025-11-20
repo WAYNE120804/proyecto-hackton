@@ -1,0 +1,31 @@
+const express = require('express');
+const { fetchCollections } = require('../services/stacService');
+
+const router = express.Router();
+
+/**
+ * GET /api/collections
+ * Ejemplo: curl "http://localhost:4000/api/collections"
+ */
+router.get('/', async (req, res, next) => {
+  try {
+    const data = await fetchCollections();
+    const simplified = (data.collections || []).map((collection) => ({
+      id: collection.id,
+      title: collection.title,
+      description: collection.description
+    }));
+
+    res.json(simplified);
+  } catch (error) {
+    next(buildHttpError(error, 'No se pudieron obtener las colecciones STAC.'));
+  }
+});
+
+function buildHttpError(error, fallbackMessage) {
+  const err = new Error(error.response?.data?.message || fallbackMessage);
+  err.status = error.response?.status || 500;
+  return err;
+}
+
+module.exports = router;
