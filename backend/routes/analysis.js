@@ -1,9 +1,11 @@
 const express = require('express');
 const { getItem, geometryWithinCaldas } = require('../services/localDataService');
 const { simulateAnalysis, analyzeAreaFromAsset } = require('../services/analysisService');
+const { analyzePolygon } = require('../services/coffeeAnalysis');
 
 const analyzeItemRouter = express.Router();
 const analyzeAreaRouter = express.Router();
+const coffeeRouter = express.Router();
 
 /**
  * GET /api/analyze?collectionId=caldas&itemId=<item-id>
@@ -38,6 +40,26 @@ analyzeItemRouter.get('/', async (req, res, next) => {
   });
 
   res.json({ hasData: true, ...analysis });
+});
+
+/**
+ * POST /api/coffee-percentage
+ * Body: { "polygon": { ...GeoJSON Polygon... } }
+ */
+coffeeRouter.post('/coffee-percentage', async (req, res) => {
+  const { polygon } = req.body || {};
+
+  if (!polygon) {
+    return res.status(400).json({ error: 'polygon es requerido' });
+  }
+
+  try {
+    const result = await analyzePolygon(polygon);
+    res.json(result);
+  } catch (error) {
+    console.error('Error en coffee-percentage:', error);
+    res.status(500).json({ error: 'No se pudo calcular el porcentaje de cafe.' });
+  }
 });
 
 /**
@@ -133,5 +155,6 @@ function buildHttpError(error, fallbackMessage) {
 
 module.exports = {
   analyzeItemRouter,
-  analyzeAreaRouter
+  analyzeAreaRouter,
+  coffeeRouter
 };

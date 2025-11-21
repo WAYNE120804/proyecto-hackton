@@ -43,3 +43,12 @@ export function analyzeArea(aoi) {
     }
   });
 }
+
+export function getCoffeePercentage(polygon) {
+  return request('/coffee-percentage', {
+    method: 'POST',
+    body: {
+      polygon
+    }
+  });
+}

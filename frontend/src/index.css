@@ -203,6 +203,11 @@ body {
   cursor: pointer;
 }
 
+.button.ghost {
+  background: #e2e8f0;
+  color: #0f172a;
+}
+
 .coverage-list {
   list-style: none;
   padding: 0;

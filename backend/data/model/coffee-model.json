@@ -1,0 +1,13 @@
+{
+  "cafe": {
+    "mean": 0,
+    "variance": 0.000001
+  },
+  "noCafe": {
+    "mean": 0.3133588936842106,
+    "variance": 0.018885655716347368
+  },
+  "priorCafe": 0,
+  "priorNoCafe": 1,
+  "degenerate": true
+}

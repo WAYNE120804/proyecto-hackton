@@ -6,7 +6,8 @@ const path = require('path');
 
 const collectionsRouter = require('./routes/collections');
 const itemsRouter = require('./routes/items');
-const { analyzeItemRouter, analyzeAreaRouter } = require('./routes/analysis');
+const { analyzeItemRouter, analyzeAreaRouter, coffeeRouter } = require('./routes/analysis');
+const { loadModel } = require('./services/coffeeModel');
 
 const app = express();
 const PORT = process.env.PORT || 4000;
@@ -32,6 +33,7 @@ app.use('/api/collections', collectionsRouter);
 app.use('/api/items', itemsRouter);
 app.use('/api/analyze', analyzeItemRouter);
 app.use('/api/analyze-area', analyzeAreaRouter);
+app.use('/api', coffeeRouter);
 
 app.use((req, res, next) => {
   res.status(404).json({ error: 'Endpoint not found' });
@@ -47,4 +49,7 @@ app.use((err, req, res, next) => {
 
 app.listen(PORT, () => {
   console.log(`Server listening on port ${PORT}`);
+  loadModel()
+    .then(() => console.log('Coffee model ready'))
+    .catch((err) => console.error('Failed to load/train coffee model', err.message || err));
 });

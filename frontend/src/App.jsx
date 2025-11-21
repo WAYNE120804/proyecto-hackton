@@ -8,13 +8,17 @@ import SCLClassificationChart from './components/SCLClassificationChart.jsx';
 import ElevationPanel from './components/ElevationPanel.jsx';
 import ImagePreview from './components/ImagePreview.jsx';
 import MapSelector from './components/MapSelector.jsx';
-import { analyzeArea } from './services/api.js';
+import { analyzeArea, getCoffeePercentage } from './services/api.js';
+import CoffeeResultPanel from './components/CoffeeResultPanel.jsx';
 
 const App = () => {
   const [aoi, setAoi] = useState(null);
   const [analysis, setAnalysis] = useState(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
+  const [coffeeResult, setCoffeeResult] = useState(null);
+  const [coffeeLoading, setCoffeeLoading] = useState(false);
+  const [coffeeError, setCoffeeError] = useState('');
 
   const handleAoiChange = (geometry) => {
     setAoi(geometry);
@@ -43,6 +47,25 @@ const App = () => {
     fetchAnalysis(aoi);
   };
 
+  const handleCoffeeAnalysis = async () => {
+    if (!aoi) {
+      setCoffeeError('Dibuja un poligono para estimar cafe.');
+      return;
+    }
+    setCoffeeLoading(true);
+    setCoffeeError('');
+    setCoffeeResult(null);
+    try {
+      const result = await getCoffeePercentage(aoi);
+      setCoffeeResult(result);
+    } catch (err) {
+      console.error(err);
+      setCoffeeError('No se pudo calcular el porcentaje de cafe.');
+    } finally {
+      setCoffeeLoading(false);
+    }
+  };
+
   return (
     <div className="app">
       <header className="header">
@@ -69,6 +92,14 @@ const App = () => {
               disabled={loading}
             >
               {loading ? 'Analizando...' : aoi ? 'Analizar poligono' : 'Ver panorama general'}
+            </button>
+            <button
+              type="button"
+              className="button ghost analyze-button"
+              onClick={handleCoffeeAnalysis}
+              disabled={coffeeLoading}
+            >
+              {coffeeLoading ? 'Calculando...' : 'Estimacion de cafe'}
             </button>
           </div>
           <MapSelector aoi={aoi} onAoiChange={handleAoiChange} />
@@ -101,6 +132,13 @@ const App = () => {
                 />
               </>
             )}
+
+            <CoffeeResultPanel
+              result={coffeeResult}
+              loading={coffeeLoading}
+              error={coffeeError}
+              aoi={!!aoi}
+            />
           </div>
         </main>
       </div>
