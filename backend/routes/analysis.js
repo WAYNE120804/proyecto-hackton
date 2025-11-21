@@ -9,6 +9,7 @@ const coffeeRouter = express.Router();
 
 /**
  * GET /api/analyze?collectionId=caldas&itemId=<item-id>
+ * Analiza una escena específica por su ID.
  * Ejemplo: curl "http://localhost:4000/api/analyze?collectionId=caldas&itemId=2021-01-03"
  */
 analyzeItemRouter.get('/', async (req, res, next) => {
@@ -20,37 +21,50 @@ analyzeItemRouter.get('/', async (req, res, next) => {
       .json({ error: 'collectionId e itemId son requeridos para analizar una escena.' });
   }
 
-  const item = getItem(collectionId, itemId);
+  try {
+    const item = getItem(collectionId, itemId);
 
-  if (!item) {
-    return res.json({
-      hasData: false,
-      message: 'No encontramos datos locales para esa imagen.'
+    if (!item) {
+      return res.json({
+        hasData: false,
+        message: 'No encontramos datos locales para esa imagen.'
+      });
+    }
+
+    const assetUrl = selectPrimaryAsset(item.assets || {});
+    const datetime = item.datetime;
+
+    const analysis = simulateAnalysis({
+      collectionId,
+      itemId,
+      datetime,
+      assetUrl
     });
+
+    res.json({ hasData: true, ...analysis });
+  } catch (error) {
+    console.error('Error in analyze endpoint:', error);
+    next(buildHttpError(error, 'No se pudo analizar la escena.'));
   }
-
-  const assetUrl = selectPrimaryAsset(item.assets || {});
-  const datetime = item.datetime;
-
-  const analysis = simulateAnalysis({
-    collectionId,
-    itemId,
-    datetime,
-    assetUrl
-  });
-
-  res.json({ hasData: true, ...analysis });
 });
 
 /**
  * POST /api/coffee-percentage
+ * Calcula el porcentaje de café en un polígono usando el modelo ML y GeoTIFF.
  * Body: { "polygon": { ...GeoJSON Polygon... } }
  */
 coffeeRouter.post('/coffee-percentage', async (req, res) => {
   const { polygon } = req.body || {};
 
   if (!polygon) {
-    return res.status(400).json({ error: 'polygon es requerido' });
+    return res.status(400).json({ error: 'polygon es requerido en el body de la peticion' });
+  }
+
+  // Validate polygon structure
+  if (!polygon.type || (polygon.type !== 'Polygon' && polygon.type !== 'Feature')) {
+    return res.status(400).json({
+      error: 'polygon debe ser un GeoJSON de tipo Polygon o Feature con geometry Polygon'
+    });
   }
 
   try {
@@ -58,7 +72,10 @@ coffeeRouter.post('/coffee-percentage', async (req, res) => {
     res.json(result);
   } catch (error) {
     console.error('Error en coffee-percentage:', error);
-    res.status(500).json({ error: 'No se pudo calcular el porcentaje de cafe.' });
+    const statusCode = error.message.includes('outside') || error.message.includes('invalid') ? 400 : 500;
+    res.status(statusCode).json({
+      error: error.message || 'No se pudo calcular el porcentaje de cafe.'
+    });
   }
 });
 

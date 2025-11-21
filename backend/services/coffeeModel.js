@@ -13,6 +13,9 @@ let cachedModel = null;
  *  - Calculamos media, varianza y prior para clase cafe y no_cafe.
  *  - Para predecir, estimamos la verosimilitud gaussiana y devolvemos P(cafe|x).
  * Esto se puede extender fácilmente a más bandas sumando más features al cálculo.
+ * 
+ * @returns {Promise<Object>} Modelo entrenado con estadísticas para café y no-café
+ * @throws {Error} Si no hay datos de entrenamiento disponibles
  */
 async function trainModel() {
   const samples = await readTrainingCsv();
@@ -52,6 +55,13 @@ async function trainModel() {
   return model;
 }
 
+/**
+ * Carga el modelo desde archivo JSON o entrena uno nuevo si no existe.
+ * El modelo se cachea en memoria para llamadas subsecuentes.
+ * 
+ * @returns {Promise<Object>} Modelo cargado o recién entrenado
+ * @throws {Error} Si no existe el archivo de entrenamiento ni el modelo guardado
+ */
 async function loadModel() {
   if (cachedModel) {
     return cachedModel;
@@ -66,12 +76,21 @@ async function loadModel() {
   if (fs.existsSync(MODEL_PATH)) {
     const file = await fs.promises.readFile(MODEL_PATH, 'utf-8');
     cachedModel = JSON.parse(file);
+    console.log('Coffee model loaded from file');
     return cachedModel;
   }
 
+  console.log('Training new coffee model...');
   return trainModel();
 }
 
+/**
+ * Predice la probabilidad de que un valor de banda corresponda a café.
+ * 
+ * @param {number} bandValue - Valor de la banda (ej. NDVI) para clasificar
+ * @returns {number} Probabilidad entre 0 y 1 de que sea café
+ * @throws {Error} Si el modelo no ha sido cargado previamente
+ */
 function predictSample(bandValue) {
   if (cachedModel === null) {
     throw new Error('Model not loaded. Call loadModel() before predicting.');

@@ -1,4 +1,5 @@
 const path = require('path');
+const fs = require('fs');
 const GeoTIFF = require('geotiff');
 const { loadModel, predictSample } = require('./coffeeModel');
 
@@ -15,28 +16,52 @@ let cachedImage = null;
 
 /**
  * Abre el GeoTIFF de banda única y lo deja en caché.
+ * @returns {Promise<Object>} GeoTIFF image object
+ * @throws {Error} Si el archivo TIFF no existe o no se puede leer
  */
 async function getImage() {
   if (cachedImage) return cachedImage;
-  const tiff = await GeoTIFF.fromFile(TIF_PATH);
-  cachedTiff = tiff;
-  const image = await tiff.getImage();
-  cachedImage = image;
-  return image;
+
+  // Validate file exists before attempting to read
+  if (!fs.existsSync(TIF_PATH)) {
+    throw new Error(`GeoTIFF file not found at path: ${TIF_PATH}`);
+  }
+
+  try {
+    const tiff = await GeoTIFF.fromFile(TIF_PATH);
+    cachedTiff = tiff;
+    const image = await tiff.getImage();
+    cachedImage = image;
+    return image;
+  } catch (error) {
+    throw new Error(`Failed to load GeoTIFF file: ${error.message}`);
+  }
 }
 
 /**
  * Calcula porcentaje de café dentro de un polígono GeoJSON (EPSG:4326).
  * - Convierte coords geográficas a índice de píxel usando la geotransformación del TIFF.
  * - Itera por la ventana bounding del polígono y cuenta probabilidad>0.5 como café.
- * -Para polígonos grandes se puede muestrear usando sampleStep (ej. 2) para acelerar.
+ * - Para polígonos grandes se puede muestrear usando sampleStep (ej. 2) para acelerar.
+ * 
+ * @param {Object} geojsonPolygon - Polígono en formato GeoJSON (Polygon o Feature con geometry Polygon)
+ * @param {Object} options - Opciones de análisis
+ * @param {number} [options.sampleStep=1] - Paso de muestreo (1=todos los píxeles, 2=cada 2 píxeles, etc.)
+ * @returns {Promise<Object>} Objeto con totalPixels, coffeePixels, y coffeePercentage
+ * @throws {Error} Si el polígono es inválido o está fuera de los límites de la imagen
  */
 async function analyzePolygon(geojsonPolygon, options = {}) {
   if (!geojsonPolygon || !geojsonPolygon.type) {
     throw new Error('Polygon GeoJSON is required');
   }
 
-  await loadModel(); // asegura que el modelo esté cargado
+  try {
+    await loadModel(); // asegura que el modelo esté cargado
+    const image = await getImage();
+  } catch (error) {
+    throw new Error(`Failed to initialize analysis: ${error.message}`);
+  }
+
   const image = await getImage();
   const resolution = image.getResolution();
   const origin = image.getOrigin();
@@ -46,8 +71,13 @@ async function analyzePolygon(geojsonPolygon, options = {}) {
   const sampleStep = options.sampleStep || 1; // subir a 2 o 3 si el polígono es enorme
 
   const ring = extractFirstRing(geojsonPolygon);
-  if (!ring.length) {
-    throw new Error('Polygon has no coordinates');
+  if (!ring || !ring.length) {
+    throw new Error('Polygon has no coordinates or is invalid. Please provide a valid Polygon or Feature with Polygon geometry.');
+  }
+
+  // Validate minimum polygon size (at least 3 points for a triangle)
+  if (ring.length < 3) {
+    throw new Error('Polygon must have at least 3 coordinate points');
   }
 
   const bbox = ring.reduce(
@@ -72,7 +102,11 @@ async function analyzePolygon(geojsonPolygon, options = {}) {
   const windowHeight = maxY - minY + 1;
 
   if (windowWidth <= 0 || windowHeight <= 0) {
-    return { totalPixels: 0, coffeePixels: 0, coffeePercentage: 0 };
+    throw new Error(
+      `Polygon is outside the image bounds. Image covers origin: [${origin[0]}, ${origin[1]}], ` +
+      `resolution: [${resolution[0]}, ${resolution[1]}], size: ${width}x${height} pixels. ` +
+      `Your polygon bbox: [${bbox.minLng}, ${bbox.minLat}] to [${bbox.maxLng}, ${bbox.maxLat}]`
+    );
   }
 
   // Leer solo la ventana necesaria de la banda
@@ -114,6 +148,11 @@ async function analyzePolygon(geojsonPolygon, options = {}) {
   };
 }
 
+/**
+ * Extrae el primer anillo de coordenadas de un objeto GeoJSON.
+ * @param {Object} geojson - Objeto GeoJSON (Polygon o Feature)
+ * @returns {Array<Array<number>>} Array de coordenadas [lng, lat]
+ */
 function extractFirstRing(geojson) {
   if (geojson.type === 'Polygon') {
     return geojson.coordinates?.[0] || [];
@@ -124,6 +163,15 @@ function extractFirstRing(geojson) {
   return [];
 }
 
+/**
+ * Proyecta un bounding box geográfico a coordenadas de píxel.
+ * @param {Object} bbox - Bounding box con minLng, maxLng, minLat, maxLat
+ * @param {Array<number>} origin - Origen del GeoTIFF [x, y]
+ * @param {Array<number>} resolution - Resolución del GeoTIFF [resX, resY]
+ * @param {number} width - Ancho de la imagen en píxeles
+ * @param {number} height - Alto de la imagen en píxeles
+ * @returns {Object} Objeto con minX, minY, maxX, maxY en coordenadas de píxel
+ */
 function projectBoundingBoxToPixels(bbox, origin, resolution, width, height) {
   const resX = resolution[0];
   const resY = resolution[1];
@@ -139,6 +187,12 @@ function projectBoundingBoxToPixels(bbox, origin, resolution, width, height) {
   return { minX, minY, maxX, maxY };
 }
 
+/**
+ * Determina si un punto está dentro de un polígono usando ray-casting.
+ * @param {Array<number>} point - Punto [x, y] en coordenadas geográficas
+ * @param {Array<Array<number>>} ring - Anillo del polígono como array de [lng, lat]
+ * @returns {boolean} true si el punto está dentro del polígono
+ */
 function pointInPolygon([x, y], ring) {
   // Implementación ray-casting 2D estándar en coords geográficas.
   let inside = false;
@@ -154,6 +208,13 @@ function pointInPolygon([x, y], ring) {
   return inside;
 }
 
+/**
+ * Limita un valor entre un mínimo y un máximo.
+ * @param {number} value - Valor a limitar
+ * @param {number} min - Valor mínimo
+ * @param {number} max - Valor máximo
+ * @returns {number} Valor limitado
+ */
 function clamp(value, min, max) {
   return Math.max(min, Math.min(max, value));
 }
