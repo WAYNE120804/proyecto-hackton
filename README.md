@@ -50,7 +50,7 @@ Este proyecto permite analizar cultivos de café en los municipios de Manizales,
 ### 1. Clonar el repositorio
 
 ```bash
-git clone https://github.com/tu-usuario/proyecto-hackton.git
+git clone https://github.com/WAYNE120804/proyecto-hackton
 cd proyecto-hackton
 ```
 
