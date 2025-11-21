@@ -1,11 +1,16 @@
 import RiskBadge from './RiskBadge.jsx';
 
+const formatNumber = (value) => {
+  if (value === null || value === undefined) return '—';
+  return Number(value).toFixed(2);
+};
+
 const AnalysisSummary = ({ analysis, loading, error }) => {
   if (loading) {
     return (
       <section className="panel">
-        <h2>Resultado</h2>
-        <p className="muted">Calculando analisis...</p>
+        <h2>Resumen general</h2>
+        <p className="muted">Procesando las bandas locales...</p>
       </section>
     );
   }
@@ -13,7 +18,7 @@ const AnalysisSummary = ({ analysis, loading, error }) => {
   if (error) {
     return (
       <section className="panel">
-        <h2>Resultado</h2>
+        <h2>Resumen general</h2>
         <p className="error">{error}</p>
       </section>
     );
@@ -22,25 +27,41 @@ const AnalysisSummary = ({ analysis, loading, error }) => {
   if (!analysis) {
     return (
       <section className="panel">
-        <h2>Resultado</h2>
-        <p className="muted">Selecciona una coleccion e imagen para ver el analisis.</p>
+        <h2>Resumen general</h2>
+        <p className="muted">Esperando un poligono o carga inicial...</p>
       </section>
     );
   }
 
-  const { indices, risk, coverage, datetime, assetUrl } = analysis;
+  if (analysis.hasData === false) {
+    return (
+      <section className="panel">
+        <h2>Resumen general</h2>
+        <p className="muted">
+          {analysis.message || 'De esta zona no tenemos informacion satelital.'}
+        </p>
+      </section>
+    );
+  }
+
+  const { indices, risk, datetime, areaLabel } = analysis;
 
   return (
     <section className="panel">
-      <h2>Resumen del analisis</h2>
+      <h2>Resumen general</h2>
+      {areaLabel && <p className="eyebrow">Alcance: {areaLabel}</p>}
       <div className="analysis-grid">
         <div>
-          <p className="metric-label">NDVI</p>
-          <p className="metric-value">{indices?.ndvi?.toFixed(2)}</p>
+          <p className="metric-label" title="Salud general de la vegetacion">
+            NDVI
+          </p>
+          <p className="metric-value">{formatNumber(indices?.ndvi)}</p>
         </div>
         <div>
-          <p className="metric-label">NDWI</p>
-          <p className="metric-value">{indices?.ndwi?.toFixed(2)}</p>
+          <p className="metric-label" title="Contenido de humedad del cultivo y suelo">
+            NDWI
+          </p>
+          <p className="metric-value">{formatNumber(indices?.ndwi)}</p>
         </div>
         <div>
           <p className="metric-label">Riesgo</p>
@@ -53,19 +74,7 @@ const AnalysisSummary = ({ analysis, loading, error }) => {
           </p>
         </div>
       </div>
-      <p className="risk-description">{risk?.description}</p>
-      {assetUrl && (
-        <a href={assetUrl} target="_blank" rel="noreferrer" className="button">
-          Ver imagen
-        </a>
-      )}
-      {coverage && (
-        <ul className="coverage-list">
-          <li>Vegetacion alta: {coverage.highVegetation}%</li>
-          <li>Vegetacion media: {coverage.mediumVegetation}%</li>
-          <li>Vegetacion baja: {coverage.lowVegetation}%</li>
-        </ul>
-      )}
+      <p className="risk-description">{risk?.description || 'Sin descripcion'}</p>
     </section>
   );
 };

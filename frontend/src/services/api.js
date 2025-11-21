@@ -1,22 +1,30 @@
 const API_BASE = 'http://localhost:4000/api';
+const COLLECTION_ID = 'caldas-sentinel2';
 
-async function request(path, params = {}) {
+async function request(path, options = {}) {
+  const { method = 'GET', query, body } = options;
   const url = new URL(`${API_BASE}${path}`);
 
-  if (params.query) {
-    Object.entries(params.query).forEach(([key, value]) => {
+  if (query) {
+    Object.entries(query).forEach(([key, value]) => {
       if (value !== undefined && value !== null && value !== '') {
         url.searchParams.append(key, value);
       }
     });
   }
 
-  const response = await fetch(url, {
-    method: 'GET',
+  const fetchOptions = {
+    method,
     headers: {
       'Content-Type': 'application/json'
     }
-  });
+  };
+
+  if (body) {
+    fetchOptions.body = JSON.stringify(body);
+  }
+
+  const response = await fetch(url, fetchOptions);
 
   if (!response.ok) {
     const message = await response.text();
@@ -26,14 +34,12 @@ async function request(path, params = {}) {
   return response.json();
 }
 
-export function getCollections() {
-  return request('/collections');
-}
-
-export function getItems(collectionId) {
-  return request('/items', { query: { collectionId } });
-}
-
-export function analyzeItem(collectionId, itemId) {
-  return request('/analyze', { query: { collectionId, itemId } });
+export function analyzeArea(aoi) {
+  return request('/analyze-area', {
+    method: 'POST',
+    body: {
+      collectionId: COLLECTION_ID,
+      aoi: aoi || null
+    }
+  });
 }

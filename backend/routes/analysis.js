@@ -1,14 +1,15 @@
 const express = require('express');
-const { fetchItem } = require('../services/stacService');
-const { simulateAnalysis } = require('../services/analysisService');
+const { getItem, geometryWithinCaldas } = require('../services/localDataService');
+const { simulateAnalysis, analyzeAreaFromAsset } = require('../services/analysisService');
 
-const router = express.Router();
+const analyzeItemRouter = express.Router();
+const analyzeAreaRouter = express.Router();
 
 /**
  * GET /api/analyze?collectionId=caldas&itemId=<item-id>
  * Ejemplo: curl "http://localhost:4000/api/analyze?collectionId=caldas&itemId=2021-01-03"
  */
-router.get('/', async (req, res, next) => {
+analyzeItemRouter.get('/', async (req, res, next) => {
   const { collectionId, itemId } = req.query;
 
   if (!collectionId || !itemId) {
@@ -17,25 +18,91 @@ router.get('/', async (req, res, next) => {
       .json({ error: 'collectionId e itemId son requeridos para analizar una escena.' });
   }
 
-  try {
-    const item = await fetchItem(collectionId, itemId);
-    const assetUrl = selectPrimaryAsset(item.assets || {});
-    const datetime = item.properties?.datetime;
+  const item = getItem(collectionId, itemId);
 
-    const analysis = simulateAnalysis({
-      collectionId,
-      itemId,
-      datetime,
-      assetUrl
+  if (!item) {
+    return res.json({
+      hasData: false,
+      message: 'No encontramos datos locales para esa imagen.'
     });
-
-    res.json(analysis);
-  } catch (error) {
-    next(buildHttpError(error, 'No se pudo analizar el item solicitado.'));
   }
+
+  const assetUrl = selectPrimaryAsset(item.assets || {});
+  const datetime = item.datetime;
+
+  const analysis = simulateAnalysis({
+    collectionId,
+    itemId,
+    datetime,
+    assetUrl
+  });
+
+  res.json({ hasData: true, ...analysis });
 });
 
-const API_KEY = process.env.STAC_API_KEY;
+/**
+ * POST /api/analyze-area
+ * Body:
+ * {
+ *   "collectionId": "caldas",
+ *   "itemId": "opcional",
+ *   "aoi": { ...GeoJSON... }
+ * }
+ */
+analyzeAreaRouter.post('/', async (req, res, next) => {
+  const { collectionId, itemId, aoi } = req.body || {};
+
+  if (!collectionId) {
+    return res.status(400).json({
+      error:
+        'collectionId es requerido y puedes enviar un poligono AOI para analizar una zona especifica.'
+    });
+  }
+
+  try {
+    if (aoi && !geometryWithinCaldas(aoi)) {
+      return res.json({
+        hasData: false,
+        message:
+          'La zona dibujada esta fuera del area disponible (Caldas: Manizales, Villamaría, Neira, Chinchiná y Palestina).'
+      });
+    }
+
+    const item = getItem(collectionId, itemId);
+
+    if (!item) {
+      return res.json({
+        hasData: false,
+        message: 'De esta zona no tenemos informacion aun.'
+      });
+    }
+
+    const assetUrl = selectPrimaryAsset(item.assets || {});
+
+    if (!assetUrl) {
+      return res.json({
+        hasData: false,
+        message: 'No encontramos assets disponibles para esta escena.'
+      });
+    }
+
+    const analysis = analyzeAreaFromAsset({
+      collectionId,
+      itemId: item.id,
+      datetime: item.datetime,
+      assetUrl,
+      aoi: aoi || null,
+      areaLabel: aoi ? 'Poligono seleccionado' : 'Cobertura general Caldas'
+    });
+
+    res.json({
+      ...analysis,
+      hasData: true
+    });
+  } catch (error) {
+    next(buildHttpError(error, 'No se pudo analizar la zona seleccionada.'));
+  }
+});
 
 function selectPrimaryAsset(assets) {
   const entries = Object.entries(assets);
@@ -44,28 +111,18 @@ function selectPrimaryAsset(assets) {
     return null;
   }
 
+  const ndvi =
+    entries.find(([key]) => key.toLowerCase().includes('ndvi')) ||
+    entries.find(([, asset]) => (asset.title || '').toLowerCase().includes('ndvi'));
+
+  if (ndvi) {
+    return ndvi[1]?.href;
+  }
+
   const geotiff =
     entries.find(([, asset]) => (asset.type || '').toLowerCase().includes('tiff')) || entries[0];
 
-  return appendApiKey(geotiff[1]?.href);
-}
-
-function appendApiKey(href) {
-  if (!href || !API_KEY) {
-    return href;
-  }
-
-  try {
-    const url = new URL(href);
-    if (!url.searchParams.get('api_key')) {
-      url.searchParams.set('api_key', API_KEY);
-    }
-    return url.toString();
-  } catch (error) {
-    // Fallback for non-absolute URLs
-    const separator = href.includes('?') ? '&' : '?';
-    return `${href}${separator}api_key=${API_KEY}`;
-  }
+  return geotiff[1]?.href;
 }
 
 function buildHttpError(error, fallbackMessage) {
@@ -74,4 +131,7 @@ function buildHttpError(error, fallbackMessage) {
   return err;
 }
 
-module.exports = router;
+module.exports = {
+  analyzeItemRouter,
+  analyzeAreaRouter
+};

@@ -47,8 +47,32 @@ async function fetchItem(collectionId, itemId) {
   return response.data;
 }
 
+async function searchItemByAoi(collectionId, aoiGeoJson, options = {}) {
+  if (!collectionId) {
+    throw new Error('collectionId is required to search items.');
+  }
+
+  if (!aoiGeoJson) {
+    throw new Error('An AOI GeoJSON is required to search items.');
+  }
+
+  const payload = {
+    collections: [collectionId],
+    intersects: aoiGeoJson,
+    limit: options.limit || 1,
+    ...options.additionalFilters
+  };
+
+  const response = await stacClient.post('/search', payload, {
+    params: withKey()
+  });
+
+  return response.data;
+}
+
 module.exports = {
   fetchCollections,
   fetchCollectionItems,
-  fetchItem
+  fetchItem,
+  searchItemByAoi
 };

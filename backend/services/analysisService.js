@@ -31,6 +31,17 @@ function simulateAnalysis({ collectionId, itemId, datetime, assetUrl }) {
  * 5. Aggregate per-pixel results to obtain coverage percentages and risk levels.
  */
 
+function analyzeAreaFromAsset({ collectionId, itemId, datetime, assetUrl, aoi, areaLabel }) {
+  // Future hook: replace simulateAnalysis with real raster statistics clipped by AOI polygon.
+  const simulation = simulateAnalysis({ collectionId, itemId, datetime, assetUrl });
+  return {
+    hasData: true,
+    ...simulation,
+    aoi,
+    areaLabel: areaLabel || 'Cobertura general'
+  };
+}
+
 function randomBetween(min, max) {
   return Number((Math.random() * (max - min) + min).toFixed(2));
 }
@@ -66,5 +77,6 @@ function computeRisk(ndvi, ndwi) {
 }
 
 module.exports = {
-  simulateAnalysis
+  simulateAnalysis,
+  analyzeAreaFromAsset
 };

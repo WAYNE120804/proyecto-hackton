@@ -1,5 +1,5 @@
 const express = require('express');
-const { fetchCollections } = require('../services/stacService');
+const { listCollections } = require('../services/localDataService');
 
 const router = express.Router();
 
@@ -9,16 +9,11 @@ const router = express.Router();
  */
 router.get('/', async (req, res, next) => {
   try {
-    const data = await fetchCollections();
-    const simplified = (data.collections || []).map((collection) => ({
-      id: collection.id,
-      title: collection.title,
-      description: collection.description
-    }));
+    const collections = listCollections();
 
-    res.json(simplified);
+    res.json(collections);
   } catch (error) {
-    next(buildHttpError(error, 'No se pudieron obtener las colecciones STAC.'));
+    next(buildHttpError(error, 'No se pudieron obtener las colecciones locales.'));
   }
 });
 

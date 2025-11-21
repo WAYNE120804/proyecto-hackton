@@ -1,5 +1,5 @@
 const express = require('express');
-const { fetchCollectionItems } = require('../services/stacService');
+const { listItems } = require('../services/localDataService');
 
 const router = express.Router();
 
@@ -14,43 +14,9 @@ router.get('/', async (req, res, next) => {
     return res.status(400).json({ error: 'collectionId es requerido' });
   }
 
-  try {
-    const data = await fetchCollectionItems(collectionId);
-    const items = (data.features || []).map(mapItem);
-
-    res.json(items);
-  } catch (error) {
-    next(buildHttpError(error, 'No se pudieron obtener los items de la coleccion.'));
-  }
+  const items = listItems(collectionId);
+  res.json(items);
 });
-
-function mapItem(feature) {
-  const assets = getRelevantAssets(feature.assets || {});
-
-  return {
-    id: feature.id,
-    datetime: feature.properties?.datetime,
-    assets
-  };
-}
-
-function getRelevantAssets(assets) {
-  const entries = Object.entries(assets);
-  const geotiffAssets = entries.filter(([, asset]) => {
-    const assetType = (asset.type || '').toLowerCase();
-    return assetType.includes('tiff') || assetType.includes('geotiff');
-  });
-
-  const targetAssets = geotiffAssets.length ? geotiffAssets : entries;
-
-  return targetAssets.map(([key, asset]) => ({
-    key,
-    href: asset.href,
-    title: asset.title,
-    type: asset.type,
-    roles: asset.roles
-  }));
-}
 
 function buildHttpError(error, fallbackMessage) {
   const err = new Error(error.response?.data?.message || fallbackMessage);
